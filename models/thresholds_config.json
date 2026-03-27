@@ -1,0 +1,16 @@
+{
+  "ml_min_probability": 0.5,
+  "threshold_tuning": {
+    "coverage": 0.7318,
+    "accepted_f1": 0.8197,
+    "selection_score": 0.8021,
+    "source": "validation_split"
+  },
+  "role_match_thresholds": {
+    "min_required_coverage": 0.3,
+    "min_required_hits": 2,
+    "min_overall_coverage": 0.2,
+    "text_hit_weight_required": 0.4,
+    "text_hit_weight_preferred": 0.3
+  }
+}
