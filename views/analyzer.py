@@ -194,7 +194,7 @@ def render():
     skills_section_found = parsed.get("skills_section_found", False)
     has_projects = parsed["projects"] is not None
     has_certs = parsed["certifications"] is not None
-    has_internship = parsed["internships"] is not None
+    has_internship = (parsed["internships"] is not None) or (parsed.get("experience") is not None)
 
     if not raw_text.strip():
         st.error("Could not extract text. Please upload a text-based PDF (not a scanned image).")

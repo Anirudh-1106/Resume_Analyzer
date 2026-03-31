@@ -53,10 +53,10 @@ FEATURE_COLUMNS = [
 # ---------------------------------------------------------------------------
 
 def _safe_parse_list(val) -> list:
-    if pd.isna(val):
-        return []
     if isinstance(val, list):
         return val
+    if pd.isna(val):
+        return []
     val = str(val).strip()
     if val.startswith("["):
         try:
@@ -79,6 +79,14 @@ def _skill_diversity(skills: list[str]) -> float:
     if not skills:
         return 0.0
     return len(set(s.lower() for s in skills)) / len(skills)
+
+
+def _has_any_content(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, list):
+        return any(str(v).strip() for v in value)
+    return bool(str(value).strip())
 
 
 # ---------------------------------------------------------------------------
@@ -111,18 +119,20 @@ def extract_features(parsed: dict) -> pd.DataFrame:
     projects    = parsed.get("projects")
     certs       = parsed.get("certifications")
     internships = parsed.get("internships")
+    experience  = parsed.get("experience")
     raw_text    = parsed.get("raw_text") or ""
 
     skills_list = skills if isinstance(skills, list) else _safe_parse_list(skills)
     proj_list   = _safe_parse_list(projects)
     cert_list   = _safe_parse_list(certs)
     intern_list = _safe_parse_list(internships)
+    has_experience_section = _has_any_content(experience)
 
     row = {
         "num_skills":           len(skills_list),
         "num_projects":         len(proj_list),
         "certifications_count": len(cert_list),
-        "internship_flag":      1 if intern_list else 0,
+        "internship_flag":      1 if (intern_list or has_experience_section) else 0,
         "skill_diversity":      _skill_diversity(skills_list),
         "has_python":           _keyword_flag(raw_text, ["python"]),
         "has_ml":               _keyword_flag(raw_text, ["machine learning", "deep learning", "tensorflow", "pytorch", "xgboost"]),

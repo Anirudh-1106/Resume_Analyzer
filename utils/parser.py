@@ -121,6 +121,41 @@ _SPECIAL_CANONICAL = {
     "express.js": "express js",
 }
 
+_SECTION_BREAK_HEADINGS = (
+    "projects?",
+    "experience",
+    "work\\s+experience",
+    "professional\\s+experience",
+    "education",
+    "certifications?",
+    "internships?",
+    "skills",
+    "technical\\s+skills",
+    "core\\s+skills",
+    "summary",
+    "profile",
+    "achievements?",
+    "positions?\\s+of\\s+responsibility",
+    "leadership",
+    "publications?",
+    "extracurricular",
+)
+
+_PROJECT_ACTION_VERBS = {
+    "built",
+    "developed",
+    "implemented",
+    "designed",
+    "optimized",
+    "engineered",
+    "created",
+    "deployed",
+    "led",
+    "integrated",
+    "worked",
+    "used",
+}
+
 
 def _normalize_text_for_match(text: str) -> str:
     txt = (text or "").lower()
@@ -224,8 +259,90 @@ def extract_skills_section(text: str) -> str | None:
     return section if section else None
 
 
-def extract_projects(text: str) -> str | None:
-    """Return the projects section snippet, or None if not found."""
+def _extract_section(text: str, headings: tuple[str, ...], max_chars: int | None = None) -> str | None:
+    if not text:
+        return None
+
+    heading_pattern = "|".join(headings)
+    break_pattern = "|".join(_SECTION_BREAK_HEADINGS)
+    pattern = re.compile(
+        rf"(?:^|\n)\s*(?:{heading_pattern})\s*[:\-]?\s*\n?(.*?)"
+        rf"(?=\n\s*(?:{break_pattern})\s*[:\-]?\s*(?:\n|$)|\Z)",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    m = pattern.search(text)
+    if not m:
+        return None
+
+    section = m.group(1).strip()
+    if not section:
+        return None
+    if max_chars is not None:
+        section = section[:max_chars]
+    return section
+
+
+def _is_project_title_line(line: str) -> bool:
+    if not line:
+        return False
+
+    compact = re.sub(r"\s+", " ", line).strip()
+    if not compact or len(compact) > 140:
+        return False
+    if re.match(r"^[-*•]\s+", compact):
+        return False
+    if compact.lower() in {"project", "projects"}:
+        return False
+
+    first_word = compact.split()[0].strip(".,:;()[]{}").lower()
+    if first_word in _PROJECT_ACTION_VERBS:
+        return False
+
+    word_count = len(compact.split())
+    if word_count < 2 or word_count > 18:
+        return False
+
+    # Typical resume project titles often include separators or short title-like naming.
+    if any(sep in compact for sep in [" - ", " – ", " | ", ": "]):
+        return True
+    if compact.endswith("."):
+        return False
+
+    return bool(re.search(r"[A-Za-z]", compact))
+
+
+def _extract_project_entries(section_text: str) -> list[str]:
+    if not section_text:
+        return []
+
+    entries = []
+    seen = set()
+    for raw_line in section_text.splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        if _is_project_title_line(line):
+            key = line.lower()
+            if key not in seen:
+                entries.append(line)
+                seen.add(key)
+
+    return entries
+
+
+def extract_projects(text: str) -> list[str] | str | None:
+    """Return project entries parsed from projects section, or None."""
+    section = _extract_section(
+        text,
+        headings=("projects?", "academic\\s+projects?", "personal\\s+projects?"),
+        max_chars=3000,
+    )
+    if section:
+        entries = _extract_project_entries(section)
+        if entries:
+            return entries
+
+    # Fallback for resumes that inline project info without clear section boundaries.
     match = re.findall(
         r"(project[s]?:?.*?)(?=\n[A-Z]|$)",
         text,
@@ -254,12 +371,21 @@ def extract_internships(text: str) -> str | None:
     return match[0][:200].strip() if match else None
 
 
+def extract_experience(text: str) -> str | None:
+    """Return the experience section snippet, or None if not found."""
+    return _extract_section(
+        text,
+        headings=("experience", "work\\s+experience", "professional\\s+experience"),
+        max_chars=1200,
+    )
+
+
 def parse_resume(file_bytes: bytes) -> dict:
     """
     Full pipeline: bytes -> structured dict with parsed fields.
 
     Returns keys:
-        raw_text, skills (list), projects, certifications, internships
+        raw_text, skills (list), projects, certifications, internships, experience
     """
     text = extract_text_from_pdf(file_bytes)
     skills_section_text = extract_skills_section(text)
@@ -285,4 +411,5 @@ def parse_resume(file_bytes: bytes) -> dict:
         "projects": extract_projects(text),
         "certifications": extract_certifications(text),
         "internships": extract_internships(text),
+        "experience": extract_experience(text),
     }
